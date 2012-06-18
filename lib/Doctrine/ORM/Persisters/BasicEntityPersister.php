@@ -33,7 +33,8 @@ use PDO,
     Doctrine\ORM\Mapping\ClassMetadata,
     Doctrine\ORM\Events,
     Doctrine\ORM\Event\LifecycleEventArgs,
-    Doctrine\Common\Util\ClassUtils;
+    Doctrine\Common\Util\ClassUtils,
+    Doctrine\Common\Collections\Criteria;
 
 /**
  * A BasicEntityPersiter maps an entity to a single table in a relational database.
@@ -749,15 +750,36 @@ class BasicEntityPersister
     }
 
     /**
+     * Load Entities matching the given Criteria object
+     *
+     * @param \Doctrine\Common\Collections\Criteria $criteria
+     * @return array
+     */
+    public function loadCriteria(Criteria $criteria)
+    {
+        $orderBy = $criteria->getOrderings();
+        $limit   = $criteria->getMaxResults();
+        $offset  = $criteria->getFirstResult();
+
+        $sql = $this->_getSelectEntitiesSQL($criteria, null, 0, $limit, $offset, $orderBy);
+        list($params, $types) = $this->expandCriteriaParameters($criteria);
+        $stmt = $this->_conn->executeQuery($sql, $params, $types);
+
+        $hydrator = $this->_em->newHydrator(($this->_selectJoinSql) ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
+
+        return $hydrator->hydrateAll($stmt, $this->_rsm, array('deferEagerLoads' => true));
+    }
+
+    /**
      * Loads a list of entities by a list of field criteria.
      *
-     * @param array $criteria
+     * @param array|Criteria $criteria
      * @param array $orderBy
      * @param int $limit
      * @param int $offset
      * @return array
      */
-    public function loadAll(array $criteria = array(), array $orderBy = null, $limit = null, $offset = null)
+    public function loadAll($criteria = array(), array $orderBy = null, $limit = null, $offset = null)
     {
         $sql = $this->_getSelectEntitiesSQL($criteria, null, 0, $limit, $offset, $orderBy);
         list($params, $types) = $this->expandParameters($criteria);
@@ -920,7 +942,7 @@ class BasicEntityPersister
     /**
      * Gets the SELECT SQL to select one or more entities by a set of field criteria.
      *
-     * @param array $criteria
+     * @param array|Criteria $criteria
      * @param AssociationMapping $assoc
      * @param string $orderBy
      * @param int $lockMode
@@ -930,10 +952,12 @@ class BasicEntityPersister
      * @return string
      * @todo Refactor: _getSelectSQL(...)
      */
-    protected function _getSelectEntitiesSQL(array $criteria, $assoc = null, $lockMode = 0, $limit = null, $offset = null, array $orderBy = null)
+    protected function _getSelectEntitiesSQL($criteria, $assoc = null, $lockMode = 0, $limit = null, $offset = null, array $orderBy = null)
     {
         $joinSql      = ($assoc != null && $assoc['type'] == ClassMetadata::MANY_TO_MANY) ? $this->_getSelectManyToManyJoinSQL($assoc) : '';
-        $conditionSql = $this->_getSelectConditionSQL($criteria, $assoc);
+        $conditionSql = ($criteria instanceof Criteria) ?
+                        $this->_getSelectConditionCriteriaSQL($criteria) :
+                        $this->_getSelectConditionSQL($criteria, $assoc);
 
         $orderBy    = ($assoc !== null && isset($assoc['orderBy'])) ? $assoc['orderBy'] : $orderBy;
         $orderBySql = $orderBy ? $this->_getOrderBySQL($orderBy, $this->_getSQLTableAlias($this->_class->name)) : '';
@@ -1337,6 +1361,75 @@ class BasicEntityPersister
     }
 
     /**
+     * Get the Select Where Condition from a Criteria object.
+     *
+     * @param Criteria $criteria
+     * @return string
+     */
+    protected function _getSelectConditionCriteriaSQL(Criteria $criteria)
+    {
+        $visitor = new SqlExpressionVisitor($this);
+        return $visitor->dispatch($criteria);
+    }
+
+    public function getSelectConditionStatementSQL($field, $value, $assoc = null, $comparision = null)
+    {
+        $conditionSql = '';
+        $placeholder  = '?';
+
+        if (isset($this->_class->columnNames[$field])) {
+            $className = (isset($this->_class->fieldMappings[$field]['inherited']))
+                ? $this->_class->fieldMappings[$field]['inherited']
+                : $this->_class->name;
+
+            $conditionSql .= $this->_getSQLTableAlias($className) . '.' . $this->quoteStrategy->getColumnName($field, $this->_class, $this->_platform);
+
+            if (isset($this->_class->fieldMappings[$field]['requireSQLConversion'])) {
+                $type = Type::getType($this->_class->getTypeOfField($field));
+                $placeholder = $type->convertToDatabaseValueSQL($placeholder, $this->_platform);
+            }
+        } else if (isset($this->_class->associationMappings[$field])) {
+            if ( ! $this->_class->associationMappings[$field]['isOwningSide']) {
+                throw ORMException::invalidFindByInverseAssociation($this->_class->name, $field);
+            }
+
+            $className = (isset($this->_class->associationMappings[$field]['inherited']))
+                ? $this->_class->associationMappings[$field]['inherited']
+                : $this->_class->name;
+
+            $conditionSql .= $this->_getSQLTableAlias($className) . '.' . $this->_class->associationMappings[$field]['joinColumns'][0]['name'];
+        } else if ($assoc !== null && strpos($field, " ") === false && strpos($field, "(") === false) {
+            // very careless developers could potentially open up this normally hidden api for userland attacks,
+            // therefore checking for spaces and function calls which are not allowed.
+
+            // found a join column condition, not really a "field"
+            $conditionSql .= $field;
+        } else {
+            throw ORMException::unrecognizedField($field);
+        }
+
+        if ($comparision === null) {
+            $conditionSql .= (is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder);
+        } else {
+            $comparisonMap = array(
+                Comparison::EQ  => '= %s',
+                Comparison::IS  => '= %s',
+                Comparison::NEQ => '!= %s',
+                Comparison::GT  => '> %s',
+                Comparison::GTE => '>= %s',
+                Comparison::LT  => '< %s',
+                Comparison::LTE => '<= %s',
+                Comparison::IN  => 'IN (%s)',
+                Comparison::NIN => 'NOT IN (%s)',
+            );
+
+            $conditionSql .= sprintf($comparisionMap[$comparision], $placeholder);
+        }
+
+        return $conditionSql;
+    }
+
+    /**
      * Gets the conditional SQL fragment used in the WHERE clause when selecting
      * entities in this persister.
      *
@@ -1353,42 +1446,9 @@ class BasicEntityPersister
 
         foreach ($criteria as $field => $value) {
             $conditionSql .= $conditionSql ? ' AND ' : '';
-
-            $placeholder = '?';
-
-            if (isset($this->_class->columnNames[$field])) {
-                $className = (isset($this->_class->fieldMappings[$field]['inherited']))
-                    ? $this->_class->fieldMappings[$field]['inherited']
-                    : $this->_class->name;
-
-                $conditionSql .= $this->_getSQLTableAlias($className) . '.' . $this->quoteStrategy->getColumnName($field, $this->_class, $this->_platform);
-
-                if (isset($this->_class->fieldMappings[$field]['requireSQLConversion'])) {
-                    $type = Type::getType($this->_class->getTypeOfField($field));
-                    $placeholder = $type->convertToDatabaseValueSQL($placeholder, $this->_platform);
-                }
-            } else if (isset($this->_class->associationMappings[$field])) {
-                if ( ! $this->_class->associationMappings[$field]['isOwningSide']) {
-                    throw ORMException::invalidFindByInverseAssociation($this->_class->name, $field);
-                }
-
-                $className = (isset($this->_class->associationMappings[$field]['inherited']))
-                    ? $this->_class->associationMappings[$field]['inherited']
-                    : $this->_class->name;
-
-                $conditionSql .= $this->_getSQLTableAlias($className) . '.' . $this->_class->associationMappings[$field]['joinColumns'][0]['name'];
-            } else if ($assoc !== null && strpos($field, " ") === false && strpos($field, "(") === false) {
-                // very careless developers could potentially open up this normally hidden api for userland attacks,
-                // therefore checking for spaces and function calls which are not allowed.
-
-                // found a join column condition, not really a "field"
-                $conditionSql .= $field;
-            } else {
-                throw ORMException::unrecognizedField($field);
-            }
-
-            $conditionSql .= (is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder);
+            $conditionSql .= $this->getSelectConditionStatementSQL($field, $value, $assoc);
         }
+
         return $conditionSql;
     }
 
