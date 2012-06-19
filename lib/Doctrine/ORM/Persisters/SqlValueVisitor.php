@@ -24,84 +24,59 @@ use Doctrine\Common\Collections\Expr\Comparison;
 use Doctrine\Common\Collections\Expr\Value;
 use Doctrine\Common\Collections\Expr\CompositeExpression;
 
+use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\DBAL\Types\Type;
+
 /**
- * Visit Expressions and generate SQL WHERE conditions from them.
+ * Extract the values from a criteria/expression
  *
  * @author Benjamin Eberlei <kontakt@beberlei.de>
- * @since 2.3
  */
-class SqlExpressionVisitor extends ExpressionVisitor
+class SqlValueVisitor extends ExpressionVisitor
 {
     /**
-     * @var BasicEntityPersister
+     * @var array
      */
-    private $persister;
+    private $values = array();
 
     /**
-     * @param BasicEntityPersister $persister
+     * @var array
      */
-    public function __construct(BasicEntityPersister $persister)
+    private $types  = array();
+
+    /**
+     * @var ClassMetadata
+     */
+    private $class;
+
+    public function __cosntruct(ClassMetadata $class)
     {
-        $this->persister = $persister;
+        $this->class = $class;
     }
 
-    /**
-     * Convert a comparison expression into the target query language output
-     *
-     * @param Comparison $comparison
-     *
-     * @return mixed
-     */
     public function walkComparison(Comparison $comparison)
     {
         $field          = $comparison->getField();
-        $value          = $comparison->getValue()->getValue(); // shortcut for walkValue()
-
-        return $this->persister->getSelectConditionStatementSQL(
-            $field,
-            $value,
-            null,
-            $comparison->getOperator()
-        );
+        $this->values[] = $comparison->getValue()->getValue();
+        $this->types[]  = isset($this->class->fieldMappings[$field]) ?
+                          Type::getType($this->class->fieldMappings[$field]['type'])->getBindingType() :
+                          \PDO::PARAM_STR;
     }
 
-    /**
-     * Convert a composite expression into the target query language output
-     *
-     * @param CompositeExpression $expr
-     *
-     * @return mixed
-     */
     public function walkCompositeExpression(CompositeExpression $expr)
     {
-        $expressionList = array();
-
         foreach ($expr->getExpressionList() as $child) {
-            $expressionList[] = $this->dispatch($child);
-        }
-
-        switch($expr->getType()) {
-            case CompositeExpression::TYPE_AND:
-                return '(' . implode(' AND ', $expressionList) . ')';
-
-            case CompositeExpression::TYPE_OR:
-                return '(' . implode(' OR ', $expressionList) . ')';
-
-            default:
-                throw new \RuntimeException("Unknown composite " . $expr->getType());
+            $this->dispatch($child);
         }
     }
 
-    /**
-     * Convert a value expression into the target query language part.
-     *
-     * @param Value $value
-     *
-     * @return mixed
-     */
     public function walkValue(Value $value)
     {
-        return '?';
+        return;
+    }
+
+    public function getParamsAndTypes()
+    {
+        return array($this->values, $this->types);
     }
 }
-

@@ -5,6 +5,7 @@ namespace Doctrine\Tests\ORM\Functional;
 use Doctrine\Tests\Models\CMS\CmsUser;
 use Doctrine\Tests\Models\CMS\CmsAddress;
 use Doctrine\Tests\Models\CMS\CmsPhonenumber;
+use Doctrine\Common\Collections\Criteria;
 
 require_once __DIR__ . '/../../TestInit.php';
 
@@ -557,6 +558,34 @@ class EntityRepositoryTest extends \Doctrine\Tests\OrmFunctionalTestCase
         $query = array_pop($this->_sqlLoggerStack->queries);
         $this->assertEquals(array(1,2,3), $query['params'][0]);
         $this->assertEquals(\Doctrine\DBAL\Connection::PARAM_INT_ARRAY, $query['types'][0]);
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingEmptyCriteria()
+    {
+        $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria());
+
+        $this->assertEquals(4, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaEqComparison()
+    {
+        $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->eq('username', 'beberlei')
+        ));
+
+        $this->assertEquals(1, count($users));
     }
 }
 

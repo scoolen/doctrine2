@@ -34,7 +34,8 @@ use PDO,
     Doctrine\ORM\Events,
     Doctrine\ORM\Event\LifecycleEventArgs,
     Doctrine\Common\Util\ClassUtils,
-    Doctrine\Common\Collections\Criteria;
+    Doctrine\Common\Collections\Criteria,
+    Doctrine\Common\Collections\Expr\Comparison;
 
 /**
  * A BasicEntityPersiter maps an entity to a single table in a relational database.
@@ -771,6 +772,24 @@ class BasicEntityPersister
     }
 
     /**
+     * Expand Criteria Parameters by walking the expressions and grabbing all
+     * parameters and types from it.
+     */
+    private function expandCriteriaParameters(Criteria $criteria)
+    {
+        $expression = $criteria->getWhereExpression();
+
+        if ($expression === null) {
+            return array(array(), array());
+        }
+
+        $valueVisitor = new SqlValueVisitor();
+        $valueVisitor->dispatch($expression);
+
+        return $valueVisitor->getParamsAndTypes();
+    }
+
+    /**
      * Loads a list of entities by a list of field criteria.
      *
      * @param array|Criteria $criteria
@@ -1368,8 +1387,14 @@ class BasicEntityPersister
      */
     protected function _getSelectConditionCriteriaSQL(Criteria $criteria)
     {
-        $visitor = new SqlExpressionVisitor($this);
-        return $visitor->dispatch($criteria);
+        $visitor    = new SqlExpressionVisitor($this);
+        $expression = $criteria->getWhereExpression();
+
+        if ($expression === null) {
+            return '';
+        }
+
+        return $visitor->dispatch($expression);
     }
 
     public function getSelectConditionStatementSQL($field, $value, $assoc = null, $comparision = null)
@@ -1411,7 +1436,7 @@ class BasicEntityPersister
         if ($comparision === null) {
             $conditionSql .= (is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder);
         } else {
-            $comparisonMap = array(
+            $comparisionMap = array(
                 Comparison::EQ  => '= %s',
                 Comparison::IS  => '= %s',
                 Comparison::NEQ => '!= %s',

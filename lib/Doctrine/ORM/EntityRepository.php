@@ -22,6 +22,11 @@ namespace Doctrine\ORM;
 use Doctrine\DBAL\LockMode;
 use Doctrine\Common\Persistence\ObjectRepository;
 
+use Doctrine\Common\Collections\Selectable;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\ExpressionBuilder;
+
 /**
  * An EntityRepository serves as a repository for entities with generic as well as
  * business specific methods for retrieving entities.
@@ -35,7 +40,7 @@ use Doctrine\Common\Persistence\ObjectRepository;
  * @author  Jonathan Wage <jonwage@gmail.com>
  * @author  Roman Borschel <roman@code-factory.org>
  */
-class EntityRepository implements ObjectRepository
+class EntityRepository implements ObjectRepository, Selectable
 {
     /**
      * @var string
@@ -300,5 +305,27 @@ class EntityRepository implements ObjectRepository
     protected function getClassMetadata()
     {
         return $this->_class;
+    }
+
+    /**
+     * Select all elements from a selectable that match the expression and
+     * return a new collection containing these elements.
+     *
+     * @param Criteria $criteria
+     * @return Collection
+     */
+    public function matching(Criteria $criteria)
+    {
+        $persister = $this->_em->getUnitOfWork()->getEntityPersister($this->_entityName);
+
+        return new ArrayCollection($persister->loadCriteria($criteria));
+    }
+
+    /**
+     * @return \Doctrine\Common\Collections\ExpressionBuilder
+     */
+    public function expr()
+    {
+        return new ExpressionBuilder();
     }
 }
