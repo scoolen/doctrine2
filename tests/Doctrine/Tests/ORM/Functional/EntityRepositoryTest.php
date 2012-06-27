@@ -587,5 +587,110 @@ class EntityRepositoryTest extends \Doctrine\Tests\OrmFunctionalTestCase
 
         $this->assertEquals(1, count($users));
     }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaNeqComparison()
+    {
+        $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->neq('username', 'beberlei')
+        ));
+
+        $this->assertEquals(3, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaInComparison()
+    {
+        $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->in('username', array('beberlei', 'gblanco'))
+        ));
+
+        $this->assertEquals(2, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaNotInComparison()
+    {
+        $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->notIn('username', array('beberlei', 'gblanco', 'asm89'))
+        ));
+
+        $this->assertEquals(1, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaLtComparison()
+    {
+        $firstUserId = $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->lt('id', $firstUserId + 1)
+        ));
+
+        $this->assertEquals(1, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaLeComparison()
+    {
+        $firstUserId = $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->lte('id', $firstUserId + 1)
+        ));
+
+        $this->assertEquals(2, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaGtComparison()
+    {
+        $firstUserId = $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->gt('id', $firstUserId)
+        ));
+
+        $this->assertEquals(3, count($users));
+    }
+
+    /**
+     * @group DDC-1637
+     */
+    public function testMatchingCriteriaGteComparison()
+    {
+        $firstUserId = $this->loadFixture();
+
+        $repository = $this->_em->getRepository('Doctrine\Tests\Models\CMS\CmsUser');
+        $users = $repository->matching(new Criteria(
+            $repository->expr()->gte('id', $firstUserId)
+        ));
+
+        $this->assertEquals(4, count($users));
+    }
 }
 

@@ -33,12 +33,12 @@ use Doctrine\Common\Collections\Expr\CompositeExpression;
 class SqlExpressionVisitor extends ExpressionVisitor
 {
     /**
-     * @var BasicEntityPersister
+     * @var \Doctrine\ORM\Persisters\BasicEntityPersister
      */
     private $persister;
 
     /**
-     * @param BasicEntityPersister $persister
+     * @param \Doctrine\ORM\Persisters\BasicEntityPersister $persister
      */
     public function __construct(BasicEntityPersister $persister)
     {
@@ -54,8 +54,8 @@ class SqlExpressionVisitor extends ExpressionVisitor
      */
     public function walkComparison(Comparison $comparison)
     {
-        $field          = $comparison->getField();
-        $value          = $comparison->getValue()->getValue(); // shortcut for walkValue()
+        $field = $comparison->getField();
+        $value = $comparison->getValue()->getValue(); // shortcut for walkValue()
 
         return $this->persister->getSelectConditionStatementSQL(
             $field,

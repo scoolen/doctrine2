@@ -81,6 +81,21 @@ use PDO,
 class BasicEntityPersister
 {
     /**
+     * @var array
+     */
+    static private $comparisonMap = array(
+        Comparison::EQ  => '= %s',
+        Comparison::IS  => '= %s',
+        Comparison::NEQ => '!= %s',
+        Comparison::GT  => '> %s',
+        Comparison::GTE => '>= %s',
+        Comparison::LT  => '< %s',
+        Comparison::LTE => '<= %s',
+        Comparison::IN  => 'IN (%s)',
+        Comparison::NIN => 'NOT IN (%s)',
+    );
+
+    /**
      * Metadata object that describes the mapping of the mapped entity class.
      *
      * @var \Doctrine\ORM\Mapping\ClassMetadata
@@ -792,13 +807,13 @@ class BasicEntityPersister
     /**
      * Loads a list of entities by a list of field criteria.
      *
-     * @param array|Criteria $criteria
+     * @param array|\Doctrine\Common\Collections\Criteria $criteria
      * @param array $orderBy
      * @param int $limit
      * @param int $offset
      * @return array
      */
-    public function loadAll($criteria = array(), array $orderBy = null, $limit = null, $offset = null)
+    public function loadAll(array $criteria = array(), array $orderBy = null, $limit = null, $offset = null)
     {
         $sql = $this->_getSelectEntitiesSQL($criteria, null, 0, $limit, $offset, $orderBy);
         list($params, $types) = $this->expandParameters($criteria);
@@ -961,7 +976,7 @@ class BasicEntityPersister
     /**
      * Gets the SELECT SQL to select one or more entities by a set of field criteria.
      *
-     * @param array|Criteria $criteria
+     * @param array|\Doctrine\Common\Collections\Criteria $criteria
      * @param AssociationMapping $assoc
      * @param string $orderBy
      * @param int $lockMode
@@ -1382,7 +1397,7 @@ class BasicEntityPersister
     /**
      * Get the Select Where Condition from a Criteria object.
      *
-     * @param Criteria $criteria
+     * @param \Doctrine\Common\Collections\Criteria $criteria
      * @return string
      */
     protected function _getSelectConditionCriteriaSQL(Criteria $criteria)
@@ -1397,7 +1412,7 @@ class BasicEntityPersister
         return $visitor->dispatch($expression);
     }
 
-    public function getSelectConditionStatementSQL($field, $value, $assoc = null, $comparision = null)
+    public function getSelectConditionStatementSQL($field, $value, $assoc = null, $comparison = null)
     {
         $conditionSql = '';
         $placeholder  = '?';
@@ -1433,22 +1448,10 @@ class BasicEntityPersister
             throw ORMException::unrecognizedField($field);
         }
 
-        if ($comparision === null) {
+        if ($comparison === null) {
             $conditionSql .= (is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder);
         } else {
-            $comparisionMap = array(
-                Comparison::EQ  => '= %s',
-                Comparison::IS  => '= %s',
-                Comparison::NEQ => '!= %s',
-                Comparison::GT  => '> %s',
-                Comparison::GTE => '>= %s',
-                Comparison::LT  => '< %s',
-                Comparison::LTE => '<= %s',
-                Comparison::IN  => 'IN (%s)',
-                Comparison::NIN => 'NOT IN (%s)',
-            );
-
-            $conditionSql .= sprintf($comparisionMap[$comparision], $placeholder);
+            $conditionSql .= ' ' . sprintf(self::$comparisonMap[$comparison], $placeholder);
         }
 
         return $conditionSql;

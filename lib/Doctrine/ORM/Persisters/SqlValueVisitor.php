@@ -25,7 +25,9 @@ use Doctrine\Common\Collections\Expr\Value;
 use Doctrine\Common\Collections\Expr\CompositeExpression;
 
 use Doctrine\ORM\Mapping\ClassMetadata;
+
 use Doctrine\DBAL\Types\Type;
+use Doctrine\DBAL\Connection;
 
 /**
  * Extract the values from a criteria/expression
@@ -45,10 +47,13 @@ class SqlValueVisitor extends ExpressionVisitor
     private $types  = array();
 
     /**
-     * @var ClassMetadata
+     * @var \Doctrine\ORM\Mapping\ClassMetadata
      */
     private $class;
 
+    /**
+     * @param \Doctrine\ORM\Mapping\ClassMetadata
+     */
     public function __cosntruct(ClassMetadata $class)
     {
         $this->class = $class;
@@ -56,11 +61,23 @@ class SqlValueVisitor extends ExpressionVisitor
 
     public function walkComparison(Comparison $comparison)
     {
+        $value          = $comparison->getValue()->getValue();
         $field          = $comparison->getField();
-        $this->values[] = $comparison->getValue()->getValue();
-        $this->types[]  = isset($this->class->fieldMappings[$field]) ?
-                          Type::getType($this->class->fieldMappings[$field]['type'])->getBindingType() :
-                          \PDO::PARAM_STR;
+        $this->values[] = $value;
+        $this->types[]  = $this->getType($field, $value);
+    }
+
+    private function getType($field, $value)
+    {
+        $type = isset($this->class->fieldMappings[$field])
+            ? Type::getType($this->class->fieldMappings[$field]['type'])->getBindingType()
+            : \PDO::PARAM_STR;
+
+        if (is_array($value)) {
+            $type += Connection::ARRAY_PARAM_OFFSET;
+        }
+
+        return $type;
     }
 
     public function walkCompositeExpression(CompositeExpression $expr)
