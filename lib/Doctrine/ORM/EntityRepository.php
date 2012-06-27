@@ -311,7 +311,7 @@ class EntityRepository implements ObjectRepository, Selectable
      * Select all elements from a selectable that match the expression and
      * return a new collection containing these elements.
      *
-     * @param Criteria $criteria
+     * @param \Doctrine\Common\Collections\Criteria $criteria
      * @return Collection
      */
     public function matching(Criteria $criteria)
