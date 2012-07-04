@@ -54,7 +54,7 @@ class SqlValueVisitor extends ExpressionVisitor
     /**
      * @param \Doctrine\ORM\Mapping\ClassMetadata
      */
-    public function __cosntruct(ClassMetadata $class)
+    public function __construct(ClassMetadata $class)
     {
         $this->class = $class;
     }
