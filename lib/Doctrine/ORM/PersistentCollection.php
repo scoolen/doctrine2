@@ -22,6 +22,9 @@ namespace Doctrine\ORM;
 use Doctrine\ORM\Mapping\ClassMetadata,
     Doctrine\Common\Collections\Collection,
     Doctrine\Common\Collections\ArrayCollection,
+    Doctrine\Common\Collections\Selectable,
+    Doctrine\Common\Collections\Criteria,
+    Doctrine\Common\Collections\ExpressionBuilder,
     Closure;
 
 /**
@@ -39,7 +42,7 @@ use Doctrine\ORM\Mapping\ClassMetadata,
  * @author    Giorgio Sironi <piccoloprincipeazzurro@gmail.com>
  * @todo      Design for inheritance to allow custom implementations?
  */
-final class PersistentCollection implements Collection
+final class PersistentCollection implements Collection, Selectable
 {
     /**
      * A snapshot of the collection at the moment it was fetched from the database.
@@ -789,4 +792,51 @@ final class PersistentCollection implements Collection
 
         $this->changed();
     }
+
+    /**
+     * Select all elements from a selectable that match the expression and
+     * return a new collection containing these elements.
+     *
+     * @param \Doctrine\Common\Collections\Criteria $criteria
+     * @return Collection
+     */
+    public function matching(Criteria $criteria)
+    {
+        if ($this->initialized) {
+            return $this->coll->matching($criteria);
+        }
+
+        if ($this->association['type'] !== ClassMetadata::ONE_TO_MANY) {
+            throw new \RuntimeException("Matching Criteria on PersistentCollection only works on OneToMany assocations at the moment.");
+        }
+
+        $targetClass = $this->em->getClassMetadata(get_class($this->owner));
+
+        if ($targetClass->isIdentifierComposite) {
+            throw new \RuntimeException("Matching Criteria on PersistentCollection only works on non-composite primary keys.");
+        }
+
+        $id          = $targetClass->getIdentifierValues($this->owner);
+        $id          = current($id);
+
+        $builder         = $this->expr();
+        $ownerExpression = $builder->eq($this->backRefFieldName, $id);
+        $expression      = $criteria->getWhereExpression();
+        $expression      = $expression ? $builder->andX($expression, $ownerExpression) : $ownerExpression;
+        $criteria->where($expression);
+
+        $persister = $this->em->getUnitOfWork()
+                              ->getEntityPersister($this->association['targetEntity']);
+
+        return new ArrayCollection($persister->loadCriteria($criteria));
+    }
+
+    /**
+     * @return \Doctrine\Common\Collections\ExpressionBuilder
+     */
+    public function expr()
+    {
+        return new ExpressionBuilder();
+    }
 }
+
