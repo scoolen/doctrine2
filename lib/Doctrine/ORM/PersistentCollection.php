@@ -812,13 +812,7 @@ final class PersistentCollection implements Collection, Selectable
 
         $targetClass = $this->em->getClassMetadata(get_class($this->owner));
 
-        if ($targetClass->isIdentifierComposite) {
-            throw new \RuntimeException("Matching Criteria on PersistentCollection only works on non-composite primary keys.");
-        }
-
-        $id          = $targetClass->getIdentifierValues($this->owner);
-        $id          = current($id);
-
+        $id              = $targetClass->getSingleIdReflectionProperty()->getValue($this->owner);
         $builder         = $this->expr();
         $ownerExpression = $builder->eq($this->backRefFieldName, $id);
         $expression      = $criteria->getWhereExpression();
