@@ -19,23 +19,26 @@
 
 namespace Doctrine\ORM\Persisters;
 
-use PDO,
-    Doctrine\DBAL\LockMode,
-    Doctrine\DBAL\Types\Type,
-    Doctrine\DBAL\Connection,
-    Doctrine\ORM\ORMException,
-    Doctrine\ORM\OptimisticLockException,
-    Doctrine\ORM\EntityManager,
-    Doctrine\ORM\UnitOfWork,
-    Doctrine\ORM\Query,
-    Doctrine\ORM\PersistentCollection,
-    Doctrine\ORM\Mapping\MappingException,
-    Doctrine\ORM\Mapping\ClassMetadata,
-    Doctrine\ORM\Events,
-    Doctrine\ORM\Event\LifecycleEventArgs,
-    Doctrine\Common\Util\ClassUtils,
-    Doctrine\Common\Collections\Criteria,
-    Doctrine\Common\Collections\Expr\Comparison;
+use PDO;
+
+use Doctrine\DBAL\LockMode;
+use Doctrine\DBAL\Types\Type;
+use Doctrine\DBAL\Connection;
+
+use Doctrine\ORM\ORMException;
+use Doctrine\ORM\OptimisticLockException;
+use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\UnitOfWork;
+use Doctrine\ORM\Query;
+use Doctrine\ORM\PersistentCollection;
+use Doctrine\ORM\Mapping\MappingException;
+use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Events;
+use Doctrine\ORM\Event\LifecycleEventArgs;
+
+use Doctrine\Common\Util\ClassUtils;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\Expr\Comparison;
 
 /**
  * A BasicEntityPersiter maps an entity to a single table in a relational database.
@@ -769,6 +772,7 @@ class BasicEntityPersister
      * Load Entities matching the given Criteria object
      *
      * @param \Doctrine\Common\Collections\Criteria $criteria
+     *
      * @return array
      */
     public function loadCriteria(Criteria $criteria)
@@ -778,7 +782,9 @@ class BasicEntityPersister
         $offset  = $criteria->getFirstResult();
 
         $sql = $this->_getSelectEntitiesSQL($criteria, null, 0, $limit, $offset, $orderBy);
+
         list($params, $types) = $this->expandCriteriaParameters($criteria);
+
         $stmt = $this->_conn->executeQuery($sql, $params, $types);
 
         $hydrator = $this->_em->newHydrator(($this->_selectJoinSql) ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
@@ -789,6 +795,10 @@ class BasicEntityPersister
     /**
      * Expand Criteria Parameters by walking the expressions and grabbing all
      * parameters and types from it.
+     *
+     * @param \Doctrine\Common\Collections\Criteria $criteria
+     *
+     * @return array(array(), array())
      */
     private function expandCriteriaParameters(Criteria $criteria)
     {
@@ -807,7 +817,7 @@ class BasicEntityPersister
     /**
      * Loads a list of entities by a list of field criteria.
      *
-     * @param array|\Doctrine\Common\Collections\Criteria $criteria
+     * @param array $criteria
      * @param array $orderBy
      * @param int $limit
      * @param int $offset
@@ -989,9 +999,9 @@ class BasicEntityPersister
     protected function _getSelectEntitiesSQL($criteria, $assoc = null, $lockMode = 0, $limit = null, $offset = null, array $orderBy = null)
     {
         $joinSql      = ($assoc != null && $assoc['type'] == ClassMetadata::MANY_TO_MANY) ? $this->_getSelectManyToManyJoinSQL($assoc) : '';
-        $conditionSql = ($criteria instanceof Criteria) ?
-                        $this->_getSelectConditionCriteriaSQL($criteria) :
-                        $this->_getSelectConditionSQL($criteria, $assoc);
+        $conditionSql = ($criteria instanceof Criteria)
+            ? $this->_getSelectConditionCriteriaSQL($criteria)
+            : $this->_getSelectConditionSQL($criteria, $assoc);
 
         $orderBy    = ($assoc !== null && isset($assoc['orderBy'])) ? $assoc['orderBy'] : $orderBy;
         $orderBySql = $orderBy ? $this->_getOrderBySQL($orderBy, $this->_getSQLTableAlias($this->_class->name)) : '';
@@ -1402,16 +1412,27 @@ class BasicEntityPersister
      */
     protected function _getSelectConditionCriteriaSQL(Criteria $criteria)
     {
-        $visitor    = new SqlExpressionVisitor($this);
         $expression = $criteria->getWhereExpression();
 
         if ($expression === null) {
             return '';
         }
 
+        $visitor = new SqlExpressionVisitor($this);
+
         return $visitor->dispatch($expression);
     }
 
+    /**
+     * Get the SQL WHERE condition for matching a field with a given value.
+     *
+     * @param string $field
+     * @param mixed $value
+     * @param array|null $assoc
+     * @param string $comparison
+     *
+     * @return string
+     */
     public function getSelectConditionStatementSQL($field, $value, $assoc = null, $comparison = null)
     {
         $conditionSql = '';
@@ -1428,7 +1449,7 @@ class BasicEntityPersister
                 $type = Type::getType($this->_class->getTypeOfField($field));
                 $placeholder = $type->convertToDatabaseValueSQL($placeholder, $this->_platform);
             }
-        } else if (isset($this->_class->associationMappings[$field])) {
+        } elseif (isset($this->_class->associationMappings[$field])) {
             if ( ! $this->_class->associationMappings[$field]['isOwningSide']) {
                 throw ORMException::invalidFindByInverseAssociation($this->_class->name, $field);
             }
@@ -1438,7 +1459,7 @@ class BasicEntityPersister
                 : $this->_class->name;
 
             $conditionSql .= $this->_getSQLTableAlias($className) . '.' . $this->_class->associationMappings[$field]['joinColumns'][0]['name'];
-        } else if ($assoc !== null && strpos($field, " ") === false && strpos($field, "(") === false) {
+        } elseif ($assoc !== null && strpos($field, " ") === false && strpos($field, "(") === false) {
             // very careless developers could potentially open up this normally hidden api for userland attacks,
             // therefore checking for spaces and function calls which are not allowed.
 
@@ -1448,11 +1469,9 @@ class BasicEntityPersister
             throw ORMException::unrecognizedField($field);
         }
 
-        if ($comparison === null) {
-            $conditionSql .= (is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder);
-        } else {
-            $conditionSql .= ' ' . sprintf(self::$comparisonMap[$comparison], $placeholder);
-        }
+        $conditionSql .= ($comparison === null)
+            ? ((is_array($value)) ? ' IN (?)' : (($value === null) ? ' IS NULL' : ' = ' . $placeholder))
+            : ' ' . sprintf(self::$comparisonMap[$comparison], $placeholder);
 
         return $conditionSql;
     }

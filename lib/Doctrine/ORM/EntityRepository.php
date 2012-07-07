@@ -43,6 +43,11 @@ use Doctrine\Common\Collections\ExpressionBuilder;
 class EntityRepository implements ObjectRepository, Selectable
 {
     /**
+     * @var Doctrine\Common\Collections\ExpressionBuilder
+     */
+    private static $expressionBuilder;
+
+    /**
      * @var string
      */
     protected $_entityName;
@@ -312,6 +317,7 @@ class EntityRepository implements ObjectRepository, Selectable
      * return a new collection containing these elements.
      *
      * @param \Doctrine\Common\Collections\Criteria $criteria
+     *
      * @return \Doctrine\Common\Collections\Collection
      */
     public function matching(Criteria $criteria)
@@ -322,10 +328,15 @@ class EntityRepository implements ObjectRepository, Selectable
     }
 
     /**
+     * Return Builder object that helps with building criteria expressions.
+     *
      * @return \Doctrine\Common\Collections\ExpressionBuilder
      */
     public function expr()
     {
-        return new ExpressionBuilder();
+        if (self::$expressionBuilder === null) {
+            self::$expressionBuilder = new ExpressionBuilder();
+        }
+        return self::$expressionBuilder;
     }
 }

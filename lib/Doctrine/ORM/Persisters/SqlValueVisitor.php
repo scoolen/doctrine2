@@ -59,12 +59,56 @@ class SqlValueVisitor extends ExpressionVisitor
         $this->class = $class;
     }
 
+    /**
+     * Convert a comparison expression into the target query language output
+     *
+     * @param \Doctrine\Common\Collections\Expr\Comparison $comparison
+     *
+     * @return mixed
+     */
     public function walkComparison(Comparison $comparison)
     {
         $value          = $comparison->getValue()->getValue();
         $field          = $comparison->getField();
+
         $this->values[] = $value;
         $this->types[]  = $this->getType($field, $value);
+    }
+
+    /**
+     * Convert a composite expression into the target query language output
+     *
+     * @param \Doctrine\Common\Collections\Expr\CompositeExpression $expr
+     *
+     * @return mixed
+     */
+    public function walkCompositeExpression(CompositeExpression $expr)
+    {
+        foreach ($expr->getExpressionList() as $child) {
+            $this->dispatch($child);
+        }
+    }
+
+    /**
+     * Convert a value expression into the target query language part.
+     *
+     * @param \Doctrine\Common\Collections\Expr\Value $value
+     *
+     * @return mixed
+     */
+    public function walkValue(Value $value)
+    {
+        return;
+    }
+
+    /**
+     * Return the Parameters and Types necessary for matching the last visited expression.
+     *
+     * @return array
+     */
+    public function getParamsAndTypes()
+    {
+        return array($this->values, $this->types);
     }
 
     private function getType($field, $value)
@@ -78,22 +122,5 @@ class SqlValueVisitor extends ExpressionVisitor
         }
 
         return $type;
-    }
-
-    public function walkCompositeExpression(CompositeExpression $expr)
-    {
-        foreach ($expr->getExpressionList() as $child) {
-            $this->dispatch($child);
-        }
-    }
-
-    public function walkValue(Value $value)
-    {
-        return;
-    }
-
-    public function getParamsAndTypes()
-    {
-        return array($this->values, $this->types);
     }
 }

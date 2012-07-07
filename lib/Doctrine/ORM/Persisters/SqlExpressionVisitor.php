@@ -48,7 +48,7 @@ class SqlExpressionVisitor extends ExpressionVisitor
     /**
      * Convert a comparison expression into the target query language output
      *
-     * @param Comparison $comparison
+     * @param \Doctrine\Common\Collections\Expr\Comparison $comparison
      *
      * @return mixed
      */
@@ -57,18 +57,13 @@ class SqlExpressionVisitor extends ExpressionVisitor
         $field = $comparison->getField();
         $value = $comparison->getValue()->getValue(); // shortcut for walkValue()
 
-        return $this->persister->getSelectConditionStatementSQL(
-            $field,
-            $value,
-            null,
-            $comparison->getOperator()
-        );
+        return $this->persister->getSelectConditionStatementSQL($field, $value, null, $comparison->getOperator());
     }
 
     /**
      * Convert a composite expression into the target query language output
      *
-     * @param CompositeExpression $expr
+     * @param \Doctrine\Common\Collections\Expr\CompositeExpression $expr
      *
      * @return mixed
      */
@@ -95,7 +90,7 @@ class SqlExpressionVisitor extends ExpressionVisitor
     /**
      * Convert a value expression into the target query language part.
      *
-     * @param Value $value
+     * @param \Doctrine\Common\Collections\Expr\Value $value
      *
      * @return mixed
      */

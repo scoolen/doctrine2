@@ -19,13 +19,15 @@
 
 namespace Doctrine\ORM;
 
-use Doctrine\ORM\Mapping\ClassMetadata,
-    Doctrine\Common\Collections\Collection,
-    Doctrine\Common\Collections\ArrayCollection,
-    Doctrine\Common\Collections\Selectable,
-    Doctrine\Common\Collections\Criteria,
-    Doctrine\Common\Collections\ExpressionBuilder,
-    Closure;
+use Doctrine\ORM\Mapping\ClassMetadata;
+
+use Doctrine\Common\Collections\Collection;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Selectable;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\ExpressionBuilder;
+
+use Closure;
 
 /**
  * A PersistentCollection represents a collection of elements that have persistent state.
@@ -44,6 +46,11 @@ use Doctrine\ORM\Mapping\ClassMetadata,
  */
 final class PersistentCollection implements Collection, Selectable
 {
+    /**
+     * @var Doctrine\Common\Collections\ExpressionBuilder
+     */
+    static private $expressionBuilder;
+
     /**
      * A snapshot of the collection at the moment it was fetched from the database.
      * This is used to create a diff of the collection at commit time.
@@ -817,20 +824,26 @@ final class PersistentCollection implements Collection, Selectable
         $ownerExpression = $builder->eq($this->backRefFieldName, $id);
         $expression      = $criteria->getWhereExpression();
         $expression      = $expression ? $builder->andX($expression, $ownerExpression) : $ownerExpression;
+
         $criteria->where($expression);
 
-        $persister = $this->em->getUnitOfWork()
-                              ->getEntityPersister($this->association['targetEntity']);
+        $persister = $this->em->getUnitOfWork()->getEntityPersister($this->association['targetEntity']);
 
         return new ArrayCollection($persister->loadCriteria($criteria));
     }
 
     /**
+     * Return Builder object that helps with building criteria expressions.
+     *
      * @return \Doctrine\Common\Collections\ExpressionBuilder
      */
     public function expr()
     {
-        return new ExpressionBuilder();
+        if (self::$expressionBuilder === null) {
+            self::$expressionBuilder = new ExpressionBuilder();
+        }
+
+        return self::$expressionBuilder;
     }
 }
 
